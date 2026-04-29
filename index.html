@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pulsed vs CW DNP — the ω₁T₂ > 1 condition</title>
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script type="text/x-mathjax-config">
+        MathJax.Hub.Config({
+            tex2jax: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']],
+                displayMath: [['$$', '$$'], ['\\[', '\\]']]
+            },
+            SVG: { fontCache: 'global' }
+        });
+    </script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.9/MathJax.js?config=TeX-AMS-MML_SVG"></script>
+    <style>
+        body { background-color: #f1f5f9; }
+        .slider-card {
+            background: white;
+            padding: 0.75rem 1rem;
+            border-radius: 0.5rem;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+            border: 1px solid #e2e8f0;
+        }
+        input[type=range] {
+            width: 100%;
+            height: 4px;
+            cursor: pointer;
+            accent-color: #3b82f6;
+        }
+        .regime-badge {
+            transition: all 0.25s ease;
+        }
+        .preset-btn {
+            transition: all 0.15s ease;
+        }
+        .preset-btn:hover { transform: translateY(-1px); }
+    </style>
+</head>
+<body class="p-4">
+    <div class="max-w-5xl mx-auto">
+        <header class="mb-4 text-center">
+            <h1 class="text-2xl font-bold text-slate-800">Pulsed vs CW: the $\omega_1 T_2 > 1$ condition</h1>
+            <p class="text-slate-600 text-sm mt-1">
+                Bloch evolution under continuous RF along $x$. The product $\omega_1 T_2$ separates coherent (pulsed) from incoherent (CW) spin dynamics.
+            </p>
+        </header>
+
+        <!-- Regime Indicator + Presets -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+            <div id="regime-card" class="regime-badge col-span-1 md:col-span-1 rounded-xl p-3 border-2 text-center bg-white">
+                <div class="text-xs font-bold text-slate-500 uppercase tracking-wider">$\omega_1 T_2$</div>
+                <div id="product-val" class="text-3xl font-bold font-mono mt-1">1.00</div>
+                <div id="regime-label" class="text-sm font-semibold mt-1">Borderline</div>
+            </div>
+            <div class="col-span-1 md:col-span-2 flex flex-col sm:flex-row gap-2">
+                <button data-preset="cw" class="preset-btn flex-1 px-4 py-3 rounded-lg bg-amber-100 hover:bg-amber-200 border border-amber-300 text-amber-900 text-sm font-semibold">
+                    CW regime &nbsp;($\omega_1 T_2 \ll 1$)
+                </button>
+                <button data-preset="borderline" class="preset-btn flex-1 px-4 py-3 rounded-lg bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-800 text-sm font-semibold">
+                    Borderline &nbsp;($\omega_1 T_2 \approx 1$)
+                </button>
+                <button data-preset="pulsed" class="preset-btn flex-1 px-4 py-3 rounded-lg bg-emerald-100 hover:bg-emerald-200 border border-emerald-300 text-emerald-900 text-sm font-semibold">
+                    Pulsed regime &nbsp;($\omega_1 T_2 \gg 1$)
+                </button>
+            </div>
+        </div>
+
+        <!-- Plot Area -->
+        <div class="mb-4">
+            <div id="plot-m" class="w-full h-[460px] bg-white rounded-xl shadow-sm border border-slate-200"></div>
+        </div>
+
+        <!-- Controls Area -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <div class="slider-card">
+                <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Rabi $\omega_1/2\pi$ (log)</label>
+                <input type="range" id="omega1" min="0" max="3" step="0.01" value="0">
+                <div class="flex justify-between text-xs mt-1">
+                    <span class="text-slate-400">1 Hz</span>
+                    <span id="v-omega1" class="font-mono text-blue-600 font-bold">1 Hz</span>
+                    <span class="text-slate-400">1 kHz</span>
+                </div>
+            </div>
+
+            <div class="slider-card">
+                <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">$T_1$ (log)</label>
+                <input type="range" id="t1" min="-3" max="1" step="0.01" value="0.301">
+                <div class="flex justify-between text-xs mt-1">
+                    <span class="text-slate-400">1 ms</span>
+                    <span id="v-t1" class="font-mono text-blue-600 font-bold">2.0 s</span>
+                    <span class="text-slate-400">10 s</span>
+                </div>
+            </div>
+
+            <div class="slider-card">
+                <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">$T_2$ (log)</label>
+                <input type="range" id="t2" min="-3" max="1" step="0.01" value="0">
+                <div class="flex justify-between text-xs mt-1">
+                    <span class="text-slate-400">1 ms</span>
+                    <span id="v-t2" class="font-mono text-blue-600 font-bold">1.0 s</span>
+                    <span class="text-slate-400">$\le 2T_1$</span>
+                </div>
+            </div>
+
+            <div class="slider-card">
+                <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Off-resonance $\Delta\nu$</label>
+                <input type="range" id="delta" min="-10" max="10" step="0.1" value="0">
+                <div class="flex justify-between text-xs mt-1">
+                    <span class="text-slate-400">-10 Hz</span>
+                    <span id="v-delta" class="font-mono text-blue-600 font-bold">0 Hz</span>
+                    <span class="text-slate-400">10 Hz</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Physics blurb -->
+        <section class="mt-6 bg-white rounded-xl p-5 border border-slate-200 text-sm text-slate-700 leading-relaxed">
+            <h2 class="text-base font-bold text-slate-800 mb-2">Why $\omega_1 T_2 > 1$ matters</h2>
+            <p class="mb-2">
+                The transition from CW to pulsed magnetic resonance — and equivalently from CW DNP to pulsed DNP — hinges on whether the spin can complete a coherent rotation before transverse relaxation damps it out. Quantitatively, this is the inequality
+                $$ \omega_1 T_2 > 1, $$
+                where $\omega_1$ is the RF/microwave Rabi frequency and $T_2$ is the transverse relaxation time.
+            </p>
+            <ul class="list-disc pl-5 space-y-1">
+                <li><span class="font-semibold text-amber-700">CW regime ($\omega_1 T_2 \ll 1$):</span> $M_x, M_y$ never build up. $M_z$ relaxes monotonically toward a saturated steady state. No oscillations are visible — the dynamics are dominated by relaxation.</li>
+                <li><span class="font-semibold text-emerald-700">Pulsed regime ($\omega_1 T_2 \gg 1$):</span> the magnetization undergoes many Rabi cycles before relaxation acts, so coherences $M_{x,y}$ are large and oscillatory. This is the regime where pulse sequences (NOVEL, ISE, etc.) can transfer polarization efficiently before $T_2$ decay.</li>
+            </ul>
+            <p class="mt-2">
+                For pulsed DNP to operate as something genuinely distinct from CW DNP — analogous to the Ernst–Anderson transition from CW NMR to FT NMR — the microwave hardware must satisfy $\omega_{1e} T_{2e} > 1$ on the electron spin. Use the presets above to flip between the two regimes and watch the dynamics change qualitatively.
+            </p>
+        </section>
+
+        <p class="mt-4 text-center text-[10px] text-slate-400 italic">
+            Numerical RK4 integration with adaptive $dt$. Constraint enforced: $T_2 \le 2T_1$.
+        </p>
+    </div>
+
+    <script>
+        const state = {
+            omega1: 1.0,
+            t1: 2.0,
+            t2: 1.0,
+            delta: 0,
+            m0: 1.0,
+            maxT: 2.0
+        };
+
+        const inputs = {
+            omega1: document.getElementById('omega1'),
+            t1: document.getElementById('t1'),
+            t2: document.getElementById('t2'),
+            delta: document.getElementById('delta')
+        };
+
+        const displays = {
+            omega1: document.getElementById('v-omega1'),
+            t1: document.getElementById('v-t1'),
+            t2: document.getElementById('v-t2'),
+            delta: document.getElementById('v-delta')
+        };
+
+        const regimeCard = document.getElementById('regime-card');
+        const productVal = document.getElementById('product-val');
+        const regimeLabel = document.getElementById('regime-label');
+
+        const presets = {
+            cw:         { omega1: 0.3,  t1: 0.301, t2: -1.0 }, // ω1=2Hz, T2=100ms → ω1T2≈1.3, but factor of 2π in physical product
+            borderline: { omega1: 0.0,  t1: 0.301, t2: 0.0  }, // ω1=1Hz, T2=1s → 2π·1·1≈6 (coherent edge)
+            pulsed:     { omega1: 2.0,  t1: 0.301, t2: 0.0  }  // ω1=100Hz, T2=1s → many oscillations
+        };
+        // Recalibrate presets so the visible ω1·T2 (using ω1 = 2π·ν1) lands cleanly:
+        // CW: ν1=0.1 Hz, T2=0.5 s → ω1T2 = 2π·0.05 ≈ 0.31  (clearly <1)
+        // Borderline: ν1=0.3 Hz, T2=1 s → ω1T2 = 2π·0.3 ≈ 1.9 (just >1)
+        // Pulsed: ν1=10 Hz, T2=1 s → ω1T2 ≈ 63 (deep pulsed)
+        presets.cw         = { omega1: -1.0,  t1: 0.301, t2: -0.301 };
+        presets.borderline = { omega1: -0.523, t1: 0.301, t2: 0.0   };
+        presets.pulsed     = { omega1: 1.0,   t1: 0.301, t2: 0.0   };
+
+        function formatTime(val) {
+            if (val < 1) return (val * 1000).toFixed(0) + " ms";
+            return val.toFixed(2) + " s";
+        }
+
+        function formatFreq(val) {
+            if (val >= 1000) return (val / 1000).toFixed(2) + " kHz";
+            if (val < 1) return val.toFixed(2) + " Hz";
+            return val.toFixed(1) + " Hz";
+        }
+
+        function setRegimeUI(product) {
+            productVal.textContent = product < 0.01 ? product.toExponential(1)
+                                  : product < 100 ? product.toFixed(2)
+                                  : product.toFixed(0);
+            // Threshold band: <1 CW, ~1 borderline, >1 pulsed
+            if (product < 0.7) {
+                regimeCard.style.borderColor = '#f59e0b';
+                regimeCard.style.background = '#fffbeb';
+                productVal.style.color = '#b45309';
+                regimeLabel.textContent = 'CW regime — relaxation-dominated';
+                regimeLabel.style.color = '#b45309';
+            } else if (product < 2) {
+                regimeCard.style.borderColor = '#94a3b8';
+                regimeCard.style.background = '#f8fafc';
+                productVal.style.color = '#334155';
+                regimeLabel.textContent = 'Borderline';
+                regimeLabel.style.color = '#334155';
+            } else {
+                regimeCard.style.borderColor = '#10b981';
+                regimeCard.style.background = '#ecfdf5';
+                productVal.style.color = '#047857';
+                regimeLabel.textContent = 'Pulsed regime — coherent';
+                regimeLabel.style.color = '#047857';
+            }
+        }
+
+        function solveBloch() {
+            let t = 0;
+            let mx = 0, my = 0, mz = 1;
+            const results = { t: [], mx: [], my: [], mz: [] };
+
+            const w1 = 2 * Math.PI * state.omega1;
+            const dw = 2 * Math.PI * state.delta;
+            const r1 = 1 / state.t1;
+            const r2 = 1 / state.t2;
+
+            const maxRate = Math.max(w1, Math.abs(dw), r1, r2);
+            let dt = Math.min(0.002, 0.1 / (maxRate + 1e-6));
+
+            const deriv = (x, y, z) => ({
+                dx: dw * y - r2 * x,
+                dy: -dw * x + w1 * z - r2 * y,
+                dz: -w1 * y - r1 * (z - state.m0)
+            });
+
+            const maxPoints = 5000;
+            const totalSteps = state.maxT / dt;
+            const stride = Math.max(1, Math.floor(totalSteps / maxPoints));
+
+            let stepCount = 0;
+            while (t <= state.maxT) {
+                if (stepCount % stride === 0) {
+                    results.t.push(t);
+                    results.mx.push(mx);
+                    results.my.push(my);
+                    results.mz.push(mz);
+                }
+                const k1 = deriv(mx, my, mz);
+                const k2 = deriv(mx + k1.dx * dt/2, my + k1.dy * dt/2, mz + k1.dz * dt/2);
+                const k3 = deriv(mx + k2.dx * dt/2, my + k2.dy * dt/2, mz + k2.dz * dt/2);
+                const k4 = deriv(mx + k3.dx * dt, my + k3.dy * dt, mz + k3.dz * dt);
+
+                mx += (dt / 6) * (k1.dx + 2*k2.dx + 2*k3.dx + k4.dx);
+                my += (dt / 6) * (k1.dy + 2*k2.dy + 2*k3.dy + k4.dy);
+                mz += (dt / 6) * (k1.dz + 2*k2.dz + 2*k3.dz + k4.dz);
+
+                t += dt;
+                stepCount++;
+            }
+            return results;
+        }
+
+        function updatePlots() {
+            state.omega1 = Math.pow(10, parseFloat(inputs.omega1.value));
+            state.t1 = Math.pow(10, parseFloat(inputs.t1.value));
+            state.t2 = Math.pow(10, parseFloat(inputs.t2.value));
+            state.delta = parseFloat(inputs.delta.value);
+
+            const maxT2 = 2 * state.t1;
+            if (state.t2 > maxT2) {
+                state.t2 = maxT2;
+                inputs.t2.value = Math.log10(state.t2);
+            }
+
+            // Choose a window that shows the relevant dynamics in either regime.
+            const oscPeriod = 1 / state.omega1;
+            state.maxT = Math.min(20, Math.max(5 * state.t2, 8 * oscPeriod, state.t1 * 2));
+
+            displays.omega1.textContent = formatFreq(state.omega1);
+            displays.t1.textContent = formatTime(state.t1);
+            displays.t2.textContent = formatTime(state.t2);
+            displays.delta.textContent = state.delta.toFixed(1) + " Hz";
+
+            // ω1·T2 product (using physical ω1 = 2π·ν1)
+            const product = 2 * Math.PI * state.omega1 * state.t2;
+            setRegimeUI(product);
+
+            const data = solveBloch();
+
+            const traceX = { x: data.t, y: data.mx, name: '$M_x$', line: { color: '#ef4444', width: 2 } };
+            const traceY = { x: data.t, y: data.my, name: '$M_y$', line: { color: '#10b981', width: 2 } };
+            const traceZ = { x: data.t, y: data.mz, name: '$M_z$', line: { color: '#3b82f6', width: 2.5 } };
+
+            const layoutTime = {
+                title: { text: 'Magnetization vs. time', font: { size: 16 } },
+                xaxis: { title: 'Time (s)', gridcolor: '#f1f5f9' },
+                yaxis: { title: 'Magnetization $M / M_0$', range: [-1.1, 1.1], gridcolor: '#f1f5f9' },
+                margin: { t: 50, b: 50, l: 60, r: 20 },
+                paper_bgcolor: 'rgba(0,0,0,0)',
+                plot_bgcolor: 'rgba(0,0,0,0)',
+                legend: { orientation: 'h', x: 0, y: 1.12 }
+            };
+
+            Plotly.react('plot-m', [traceX, traceY, traceZ], layoutTime, { displaylogo: false, responsive: true });
+        }
+
+        function applyPreset(name) {
+            const p = presets[name];
+            if (!p) return;
+            inputs.omega1.value = p.omega1;
+            inputs.t1.value = p.t1;
+            inputs.t2.value = p.t2;
+            inputs.delta.value = 0;
+            updatePlots();
+        }
+
+        Object.keys(inputs).forEach(key => {
+            inputs[key].addEventListener('input', updatePlots);
+        });
+
+        document.querySelectorAll('[data-preset]').forEach(btn => {
+            btn.addEventListener('click', () => applyPreset(btn.dataset.preset));
+        });
+
+        window.onload = updatePlots;
+    </script>
+</body>
+</html>
