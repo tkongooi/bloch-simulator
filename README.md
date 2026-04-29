@@ -13,6 +13,17 @@ where ω₁ is the RF/microwave Rabi frequency and T₂ is the transverse relaxa
 
 Three preset buttons jump between the regimes; the live ω₁T₂ readout color-codes the current regime.
 
+## Slider scales (DNP-relevant)
+
+| Parameter | Range | Default |
+|---|---|---|
+| Rabi ω₁/2π | 10 kHz – 1 GHz (log) | 1 MHz |
+| T₁ | 100 µs – 1 s (log) | 1 ms |
+| T₂ | 10 ns – 10 µs (log) | 1 µs |
+| Off-resonance Δν | ±10 MHz | 0 |
+
+The plot's time axis auto-picks its display unit (s / ms / µs / ns) based on the dynamics window.
+
 ## Run locally
 
 It's a single static HTML file — open `index.html` in a browser, or:

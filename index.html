@@ -144,7 +144,9 @@
     </div>
 
     <script>
-        const MAX_STEPS = 50000;
+        // Cap chosen so dt·ω stays below RK4's stability limit (~2.8) across the
+        // full slider domain — at ν₁ = 1 GHz with T₂ = 10 μs we need ~3·10⁵ steps.
+        const MAX_STEPS = 500000;
         const MAX_PLOT_POINTS = 5000;
 
         // log10 slider values; state stores ν₁ (Hz), T₁/T₂ (s), Δν (Hz). ω₁ = 2π·ν₁.
