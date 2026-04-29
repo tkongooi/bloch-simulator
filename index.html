@@ -82,31 +82,31 @@
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             <div class="slider-card">
                 <label for="omega1" class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Rabi $\omega_1/2\pi$ (log)</label>
-                <input type="range" id="omega1" min="0" max="3" step="0.01" value="0">
+                <input type="range" id="omega1" min="4" max="9" step="0.01" value="6">
                 <div class="flex justify-between text-xs mt-1">
-                    <span class="text-slate-400">1 Hz</span>
-                    <span id="v-omega1" class="font-mono text-blue-600 font-bold">1 Hz</span>
-                    <span class="text-slate-400">1 kHz</span>
+                    <span class="text-slate-400">10 kHz</span>
+                    <span id="v-omega1" class="font-mono text-blue-600 font-bold">1.0 MHz</span>
+                    <span class="text-slate-400">1 GHz</span>
                 </div>
             </div>
 
             <div class="slider-card">
                 <label for="t1" class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">$T_1$ (log)</label>
-                <input type="range" id="t1" min="-3" max="1" step="0.01" value="0.301">
+                <input type="range" id="t1" min="-4" max="0" step="0.01" value="-3">
                 <div class="flex justify-between text-xs mt-1">
-                    <span class="text-slate-400">1 ms</span>
-                    <span id="v-t1" class="font-mono text-blue-600 font-bold">2.0 s</span>
-                    <span class="text-slate-400">10 s</span>
+                    <span class="text-slate-400">100 μs</span>
+                    <span id="v-t1" class="font-mono text-blue-600 font-bold">1.0 ms</span>
+                    <span class="text-slate-400">1 s</span>
                 </div>
             </div>
 
             <div class="slider-card">
                 <label for="t2" class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">$T_2$ (log)</label>
-                <input type="range" id="t2" min="-3" max="1" step="0.01" value="0">
+                <input type="range" id="t2" min="-8" max="-5" step="0.01" value="-6">
                 <div class="flex justify-between text-xs mt-1">
-                    <span class="text-slate-400">1 ms</span>
-                    <span id="v-t2" class="font-mono text-blue-600 font-bold">1.0 s</span>
-                    <span class="text-slate-400">$\le 2T_1$</span>
+                    <span class="text-slate-400">10 ns</span>
+                    <span id="v-t2" class="font-mono text-blue-600 font-bold">1.0 μs</span>
+                    <span class="text-slate-400">10 μs</span>
                 </div>
             </div>
 
@@ -114,9 +114,9 @@
                 <label for="delta" class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Off-resonance $\Delta\nu$</label>
                 <input type="range" id="delta" min="-10" max="10" step="0.1" value="0">
                 <div class="flex justify-between text-xs mt-1">
-                    <span class="text-slate-400">-10 Hz</span>
-                    <span id="v-delta" class="font-mono text-blue-600 font-bold">0 Hz</span>
-                    <span class="text-slate-400">10 Hz</span>
+                    <span class="text-slate-400">-10 MHz</span>
+                    <span id="v-delta" class="font-mono text-blue-600 font-bold">0.0 MHz</span>
+                    <span class="text-slate-400">10 MHz</span>
                 </div>
             </div>
         </div>
@@ -147,11 +147,12 @@
         const MAX_STEPS = 50000;
         const MAX_PLOT_POINTS = 5000;
 
-        // log10 slider values; store as the physical frequency ν₁ (Hz). ω₁ = 2π·ν₁.
+        // log10 slider values; state stores ν₁ (Hz), T₁/T₂ (s), Δν (Hz). ω₁ = 2π·ν₁.
+        // DNP scales: Rabi ν₁ ~ MHz, T₁ ~ ms, T₂ ~ 10 ns–10 μs, off-resonance ~ MHz.
         const PRESETS = {
-            cw:         { nu1: -1.0,   t1: 0.301, t2: -0.301 },
-            borderline: { nu1: -0.523, t1: 0.301, t2: 0.0    },
-            pulsed:     { nu1: 1.0,    t1: 0.301, t2: 0.0    }
+            cw:         { nu1: 5.0, t1: -3, t2: -6.301 }, // ν₁=0.1 MHz, T₂=500 ns → ω₁T₂≈0.31
+            borderline: { nu1: 5.4, t1: -3, t2: -6 }, // ν₁=0.25 MHz, T₂=1 μs → ω₁T₂≈1.6
+            pulsed:     { nu1: 8.0, t1: -3, t2: -6 }  // ν₁=100 MHz, T₂=1 μs → ω₁T₂≈630
         };
 
         const REGIMES = [
@@ -160,7 +161,7 @@
             { max: Infinity, key: 'pulsed',     label: 'Pulsed regime — coherent' }
         ];
 
-        const state = { nu1: 1.0, t1: 2.0, t2: 1.0, delta: 0, m0: 1.0, maxT: 2.0 };
+        const state = { nu1: 1e6, t1: 1e-3, t2: 1e-6, delta: 0, m0: 1.0, maxT: 1e-5 };
 
         const inputs = {
             nu1:   document.getElementById('omega1'),
@@ -198,13 +199,22 @@
         ];
 
         function formatTime(v) {
-            if (v < 1) return (v * 1000).toFixed(0) + " ms";
-            return v.toFixed(2) + " s";
+            if (v >= 1)     return v.toFixed(2) + " s";
+            if (v >= 1e-3)  return (v * 1e3).toFixed(2) + " ms";
+            if (v >= 1e-6)  return (v * 1e6).toFixed(2) + " μs";
+            return (v * 1e9).toFixed(1) + " ns";
         }
         function formatFreq(v) {
-            if (v >= 1000) return (v / 1000).toFixed(2) + " kHz";
-            if (v < 1)     return v.toFixed(2) + " Hz";
+            if (v >= 1e9) return (v / 1e9).toFixed(2) + " GHz";
+            if (v >= 1e6) return (v / 1e6).toFixed(2) + " MHz";
+            if (v >= 1e3) return (v / 1e3).toFixed(2) + " kHz";
             return v.toFixed(1) + " Hz";
+        }
+        function pickTimeScale(maxT) {
+            if (maxT >= 1)    return { factor: 1,   unit: 's' };
+            if (maxT >= 1e-3) return { factor: 1e3, unit: 'ms' };
+            if (maxT >= 1e-6) return { factor: 1e6, unit: 'μs' };
+            return { factor: 1e9, unit: 'ns' };
         }
         function formatProduct(p) {
             if (p < 0.01) return p.toExponential(1);
@@ -276,7 +286,7 @@
             state.nu1   = Math.pow(10, parseFloat(inputs.nu1.value));
             state.t1    = Math.pow(10, parseFloat(inputs.t1.value));
             state.t2    = Math.pow(10, parseFloat(inputs.t2.value));
-            state.delta = parseFloat(inputs.delta.value);
+            state.delta = parseFloat(inputs.delta.value) * 1e6;  // slider is in MHz
 
             const maxT2 = 2 * state.t1;
             if (state.t2 > maxT2) {
@@ -284,21 +294,27 @@
                 inputs.t2.value = Math.log10(state.t2);
             }
 
+            // DNP focus: show coherent dynamics window (Rabi cycles vs T₂ decay).
+            // T₁ ≫ T₂ at these scales, so don't extend the plot window to T₁.
             const oscPeriod = 1 / state.nu1;
-            state.maxT = Math.min(20, Math.max(5 * state.t2, 8 * oscPeriod, state.t1 * 2));
+            state.maxT = Math.max(5 * state.t2, 8 * oscPeriod);
 
             displays.nu1.textContent   = formatFreq(state.nu1);
             displays.t1.textContent    = formatTime(state.t1);
             displays.t2.textContent    = formatTime(state.t2);
-            displays.delta.textContent = state.delta.toFixed(1) + " Hz";
+            displays.delta.textContent = (state.delta / 1e6).toFixed(1) + " MHz";
 
             setRegimeUI(2 * Math.PI * state.nu1 * state.t2);
 
             const data = solveBloch();
+            const tScale = pickTimeScale(state.maxT);
+            const tDisplay = data.t.map(v => v * tScale.factor);
+            layoutTime.xaxis.title = `Time (${tScale.unit})`;
+
             const traces = [
-                { ...traceTemplates[0], x: data.t, y: data.mx },
-                { ...traceTemplates[1], x: data.t, y: data.my },
-                { ...traceTemplates[2], x: data.t, y: data.mz }
+                { ...traceTemplates[0], x: tDisplay, y: data.mx },
+                { ...traceTemplates[1], x: tDisplay, y: data.my },
+                { ...traceTemplates[2], x: tDisplay, y: data.mz }
             ];
             Plotly.react(plotEl, traces, layoutTime, plotConfig);
         }
