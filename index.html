@@ -130,7 +130,7 @@
                 where $\omega_1$ is the RF/microwave Rabi frequency and $T_2$ is the transverse relaxation time.
             </p>
             <ul class="list-disc pl-5 space-y-1">
-                <li><span class="font-semibold text-amber-700">CW regime ($\omega_1 T_2 \ll 1$):</span> $M_x, M_y$ never build up. $M_z$ relaxes monotonically toward a saturated steady state. No oscillations are visible — the dynamics are dominated by relaxation.</li>
+                <li><span class="font-semibold text-amber-700">CW regime ($\omega_1 T_2 \ll 1$):</span> $M_x, M_y$ stay small (of order $\omega_1 T_2$). $M_z$ decays monotonically toward a saturated steady state. No oscillations are visible — the dynamics are dominated by relaxation.</li>
                 <li><span class="font-semibold text-emerald-700">Pulsed regime ($\omega_1 T_2 \gg 1$):</span> the magnetization undergoes many Rabi cycles before relaxation acts, so coherences $M_{x,y}$ are large and oscillatory. This is the regime where pulse sequences (NOVEL, ISE, etc.) can transfer polarization efficiently before $T_2$ decay.</li>
             </ul>
             <p class="mt-2">
@@ -139,15 +139,16 @@
         </section>
 
         <p class="mt-4 text-center text-[10px] text-slate-400 italic">
-            Numerical RK4 integration with adaptive $dt$. Constraint enforced: $T_2 \le 2T_1$.
+            Exact solution of the Bloch equations (matrix-exponential propagator). Constraint enforced: $T_2 \le 2T_1$.
         </p>
     </div>
 
     <script>
-        // Cap chosen so dt·ω stays below RK4's stability limit (~2.8) across the
-        // full slider domain — at ν₁ = 1 GHz with T₂ = 10 μs we need ~3·10⁵ steps.
-        const MAX_STEPS = 500000;
-        const MAX_PLOT_POINTS = 5000;
+        // Samples are taken from the exact propagator, so the only limit is display:
+        // keep ≥ PTS_PER_CYCLE points per nutation cycle so the plot never aliases.
+        const N_POINTS = 8000;
+        const PTS_PER_CYCLE = 16;
+        const MAX_CYCLES = N_POINTS / PTS_PER_CYCLE;
 
         // log10 slider values; state stores ν₁ (Hz), T₁/T₂ (s), Δν (Hz). ω₁ = 2π·ν₁.
         // DNP scales: Rabi ν₁ ~ MHz, T₁ ~ ms, T₂ ~ 10 ns–10 μs, off-resonance ~ MHz.
@@ -231,55 +232,60 @@
             regimeCard.className = 'regime-badge regime-' + r.key + ' rounded-xl p-3 border-2 text-center';
         }
 
-        function solveBloch() {
-            let t = 0, mx = 0, my = 0, mz = 1;
-            const tArr = [], mxArr = [], myArr = [], mzArr = [];
+        function mul3(P, Q) {
+            const R = new Array(9);
+            for (let i = 0; i < 3; i++)
+                for (let j = 0; j < 3; j++)
+                    R[3*i+j] = P[3*i]*Q[j] + P[3*i+1]*Q[3+j] + P[3*i+2]*Q[6+j];
+            return R;
+        }
 
+        // 3×3 matrix exponential (row-major) by scaling and squaring + Taylor series.
+        function expm3(A) {
+            let norm = 0;
+            for (let i = 0; i < 3; i++)
+                norm = Math.max(norm, Math.abs(A[3*i]) + Math.abs(A[3*i+1]) + Math.abs(A[3*i+2]));
+            const s = norm > 0.5 ? Math.ceil(Math.log2(norm / 0.5)) : 0;
+            const X = A.map(v => v * Math.pow(2, -s));
+            let E = [1,0,0, 0,1,0, 0,0,1], term = E.slice();
+            for (let n = 1; n <= 14; n++) {
+                term = mul3(term, X).map(v => v / n);
+                for (let i = 0; i < 9; i++) E[i] += term[i];
+            }
+            for (let i = 0; i < s; i++) E = mul3(E, E);
+            return E;
+        }
+
+        // Rotating-frame Bloch equations, B₁ along x:  dM/dt = A·M + (0, 0, M₀/T₁).
+        // Constant coefficients ⇒ exact solution M(t+h) = M∞ + e^{Ah}·(M(t) − M∞),
+        // so samples are exact at any spacing (no step-size stability/accuracy limit).
+        function solveBloch() {
             const w1 = 2 * Math.PI * state.nu1;
             const dw = 2 * Math.PI * state.delta;
             const r1 = 1 / state.t1;
             const r2 = 1 / state.t2;
             const m0 = state.m0;
 
-            const maxRate = Math.max(w1, Math.abs(dw), r1, r2);
-            // RK4 stays stable far below 0.1/maxRate; cap total steps so dragging the
-            // ω₁ slider near max doesn't push the integrator into the millions of steps.
-            const stabilityDt = 0.1 / (maxRate + 1e-6);
-            const dt = Math.max(Math.min(0.002, stabilityDt), state.maxT / MAX_STEPS);
+            // Steady state M∞ = −A⁻¹b (closed form).
+            const D  = r1 * (r2*r2 + dw*dw) + w1*w1*r2;
+            const sx = m0 * r1 * dw * w1 / D;
+            const sy = m0 * r1 * r2 * w1 / D;
+            const sz = m0 * r1 * (r2*r2 + dw*dw) / D;
 
-            const totalSteps = state.maxT / dt;
-            const stride = Math.max(1, Math.floor(totalSteps / MAX_PLOT_POINTS));
+            const h = state.maxT / (N_POINTS - 1);
+            const P = expm3([-r2,  dw,   0,
+                             -dw, -r2,  w1,
+                               0, -w1, -r1].map(v => v * h));
 
-            let stepCount = 0;
-            while (t <= state.maxT) {
-                if (stepCount % stride === 0) {
-                    tArr.push(t); mxArr.push(mx); myArr.push(my); mzArr.push(mz);
-                }
-                const k1x =  dw*my       - r2*mx;
-                const k1y = -dw*mx + w1*mz - r2*my;
-                const k1z =        -w1*my - r1*(mz - m0);
-
-                const ax = mx + k1x*dt/2, ay = my + k1y*dt/2, az = mz + k1z*dt/2;
-                const k2x =  dw*ay        - r2*ax;
-                const k2y = -dw*ax + w1*az - r2*ay;
-                const k2z =        -w1*ay - r1*(az - m0);
-
-                const bx = mx + k2x*dt/2, by = my + k2y*dt/2, bz = mz + k2z*dt/2;
-                const k3x =  dw*by        - r2*bx;
-                const k3y = -dw*bx + w1*bz - r2*by;
-                const k3z =        -w1*by - r1*(bz - m0);
-
-                const cx = mx + k3x*dt, cy = my + k3y*dt, cz = mz + k3z*dt;
-                const k4x =  dw*cy        - r2*cx;
-                const k4y = -dw*cx + w1*cz - r2*cy;
-                const k4z =        -w1*cy - r1*(cz - m0);
-
-                mx += (dt/6) * (k1x + 2*k2x + 2*k3x + k4x);
-                my += (dt/6) * (k1y + 2*k2y + 2*k3y + k4y);
-                mz += (dt/6) * (k1z + 2*k2z + 2*k3z + k4z);
-
-                t += dt;
-                stepCount++;
+            const tArr = new Array(N_POINTS), mxArr = new Array(N_POINTS),
+                  myArr = new Array(N_POINTS), mzArr = new Array(N_POINTS);
+            let x = -sx, y = -sy, z = m0 - sz;   // deviation from M∞; M(0) = (0, 0, M₀)
+            for (let i = 0; i < N_POINTS; i++) {
+                tArr[i] = i * h; mxArr[i] = x + sx; myArr[i] = y + sy; mzArr[i] = z + sz;
+                const nx = P[0]*x + P[1]*y + P[2]*z;
+                const ny = P[3]*x + P[4]*y + P[5]*z;
+                const nz = P[6]*x + P[7]*y + P[8]*z;
+                x = nx; y = ny; z = nz;
             }
             return { t: tArr, mx: mxArr, my: myArr, mz: mzArr };
         }
@@ -296,10 +302,17 @@
                 inputs.t2.value = Math.log10(state.t2);
             }
 
-            // DNP focus: show coherent dynamics window (Rabi cycles vs T₂ decay).
-            // T₁ ≫ T₂ at these scales, so don't extend the plot window to T₁.
-            const oscPeriod = 1 / state.nu1;
-            state.maxT = Math.max(5 * state.t2, 8 * oscPeriod);
+            // Window: 5·T₂ of coherent decay, ≥ 8 nutation periods at the effective
+            // field, and 5× the CW saturation time so M_z visibly reaches steady state.
+            // T₁ ≫ T₂ at these scales, so T₁ itself does not set the window.
+            const w1 = 2 * Math.PI * state.nu1, dw = 2 * Math.PI * state.delta;
+            const nuEff = Math.hypot(w1, dw) / (2 * Math.PI);
+            const satRate = 1 / state.t1 + w1 * w1 * state.t2 / (1 + (dw * state.t2) ** 2);
+            state.maxT = Math.max(5 * state.t2, 8 / nuEff, 5 / satRate);
+            // Coherent case with more cycles than the plot can resolve: truncate the
+            // window rather than alias the oscillation.
+            const truncated = 2 * Math.PI * nuEff * state.t2 > 1 && nuEff * state.maxT > MAX_CYCLES;
+            if (truncated) state.maxT = MAX_CYCLES / nuEff;
 
             displays.nu1.textContent   = formatFreq(state.nu1);
             displays.t1.textContent    = formatTime(state.t1);
@@ -312,6 +325,11 @@
             const tScale = pickTimeScale(state.maxT);
             const tDisplay = data.t.map(v => v * tScale.factor);
             layoutTime.xaxis.title = `Time (${tScale.unit})`;
+            layoutTime.annotations = truncated ? [{
+                xref: 'paper', yref: 'paper', x: 1, y: 1.01, xanchor: 'right', yanchor: 'bottom',
+                showarrow: false, font: { size: 11, color: '#64748b' },
+                text: `Window limited to ${MAX_CYCLES} nutation cycles (= ${(state.maxT / state.t2).toPrecision(2)} T<sub>2</sub>)`
+            }] : [];
 
             const traces = [
                 { ...traceTemplates[0], x: tDisplay, y: data.mx },

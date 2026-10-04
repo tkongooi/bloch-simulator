@@ -22,7 +22,7 @@ Three preset buttons jump between the regimes; the live ω₁T₂ readout color-
 | T₂ | 10 ns – 10 µs (log) | 1 µs |
 | Off-resonance Δν | ±10 MHz | 0 |
 
-The plot's time axis auto-picks its display unit (s / ms / µs / ns) based on the dynamics window.
+The plot window covers max(5·T₂, 8 nutation periods, 5× the CW saturation time), so both coherent decay and M_z saturation are visible. When that would contain more than 500 nutation cycles (ω₁T₂ ≳ 10³), the window is capped at 500 cycles and labelled, rather than aliasing the oscillation. The time axis auto-picks its display unit (s / ms / µs / ns).
 
 ## Run locally
 
@@ -41,7 +41,7 @@ Static deployment on Vercel — no build step, no framework. Just `vercel --prod
 - Plotly.js for plotting
 - Tailwind (CDN) for layout
 - MathJax 2.7 for inline LaTeX (required by Plotly's tick labels)
-- RK4 integration of the Bloch equations with adaptive `dt`
+- Exact solution of the Bloch equations: M(t+h) = M∞ + e^{Ah}(M(t) − M∞), with a 3×3 matrix exponential (scaling-and-squaring), sampled at 8000 points
 
 ## Reference
 
